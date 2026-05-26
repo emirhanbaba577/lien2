@@ -324,7 +324,7 @@ async def sosyal(ctx):
     embed = discord.Embed(title="🌐 Lien2 Resmi Bağlantılar", color=0x3498db)
     embed.add_field(name="📸 Instagram", value="[lienmt2](https://www.instagram.com/lienmt2/)", inline=False)
     embed.add_field(name="🌐 Web Site", value="[lien2.com.tr](https://lien2.com.tr/)", inline=False)
-    embed.add_field(name="💬 Discord", value="[discord.gg/lien2](https://discord.gg/lien2)", inline=False)
+    embed.add_field(name="💬 Discord", value="https://discord.gg/lien2", inline=False)
     embed.add_field(name="▶️ YouTube", value="[@LienMt2](https://www.youtube.com/@LienMt2)", inline=False)
     embed.set_thumbnail(url=LOGO_URL)
     embed.set_image(url=GIF_URL)
