@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands
 import os
+import traceback
 from flask import Flask
 from threading import Thread
 
@@ -39,20 +40,6 @@ KARAKTER_ROLLER = {
     'rol_sura': 1473750745361944802
 }
 
-# --- KULLANICININ AÇIK BİLETİ VAR MI KONTROL ET ---
-def kullanici_bileti_var(guild, user_id):
-    kategori = guild.get_channel(TICKET_KATEGORI_ID)
-    if kategori:
-        for kanal in kategori.channels:
-            if str(user_id) in [str(m.id) for m in kanal.overwrites]:
-                return True
-            # Kanal ismine göre de kontrol
-            for perm_target, overwrite in kanal.overwrites.items():
-                if isinstance(perm_target, discord.Member) and perm_target.id == user_id:
-                    if overwrite.read_messages:
-                        return True
-    return False
-
 # --- YARDIMCI FONKSİYONLAR ---
 async def send_ticket_log(action, channel_name, opener, closer=None):
     log_channel = bot.get_channel(TICKET_LOG_KANAL_ID)
@@ -67,39 +54,39 @@ async def send_ticket_log(action, channel_name, opener, closer=None):
         embed.set_thumbnail(url=LOGO_URL)
         await log_channel.send(embed=embed)
 
-async def kanal_kapat(i: discord.Interaction):
-    await i.response.defer()
-    messages = []
-    async for msg in i.channel.history(limit=None, oldest_first=True):
-        zaman = msg.created_at.strftime("%d/%m/%Y %H:%M")
-        content = msg.content if msg.content else "[Görsel/Ek]"
-        messages.append(f"[{zaman}] {msg.author.display_name}: {content}")
-
-    chat_history = "\n".join(messages)
-    file_name = f"log_{i.channel.name}.txt"
-    with open(file_name, "w", encoding="utf-8") as f:
-        f.write(f"Lien2 Bilet Kaydi\nKanal: {i.channel.name}\n" + "="*30 + "\n" + chat_history)
-
-    log_channel = bot.get_channel(TICKET_LOG_KANAL_ID)
-    if log_channel:
-        with open(file_name, "rb") as f:
-            df = discord.File(f, filename=file_name)
-            embed_log = discord.Embed(title="🔒 Bilet Kapatıldı", color=0xe74c3c, timestamp=discord.utils.utcnow())
-            embed_log.add_field(name="Kanal", value=f"`{i.channel.name}`", inline=True)
-            embed_log.add_field(name="Kapatan", value=i.user.mention, inline=True)
-            await log_channel.send(embed=embed_log, file=df)
-
-    if os.path.exists(file_name): os.remove(file_name)
-    await i.channel.delete()
-
 # --- KAPAT BUTONU VIEW (PERSISTENT) ---
 class KapatView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="Kanalı Kapat", style=discord.ButtonStyle.danger, custom_id="kanal_kapat_btn")
+    @discord.ui.button(label="Kanalı Kapat", style=discord.ButtonStyle.danger, custom_id="lien2_kanal_kapat")
     async def kapat(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await kanal_kapat(interaction)
+        try:
+            await interaction.response.defer()
+            messages = []
+            async for msg in interaction.channel.history(limit=None, oldest_first=True):
+                zaman = msg.created_at.strftime("%d/%m/%Y %H:%M")
+                content = msg.content if msg.content else "[Görsel/Ek]"
+                messages.append(f"[{zaman}] {msg.author.display_name}: {content}")
+
+            chat_history = "\n".join(messages)
+            file_name = f"log_{interaction.channel.name}.txt"
+            with open(file_name, "w", encoding="utf-8") as f:
+                f.write(f"Lien2 Bilet Kaydi\nKanal: {interaction.channel.name}\n" + "="*30 + "\n" + chat_history)
+
+            log_channel = bot.get_channel(TICKET_LOG_KANAL_ID)
+            if log_channel:
+                with open(file_name, "rb") as f:
+                    df = discord.File(f, filename=file_name)
+                    embed_log = discord.Embed(title="🔒 Bilet Kapatıldı", color=0xe74c3c, timestamp=discord.utils.utcnow())
+                    embed_log.add_field(name="Kanal", value=f"`{interaction.channel.name}`", inline=True)
+                    embed_log.add_field(name="Kapatan", value=interaction.user.mention, inline=True)
+                    await log_channel.send(embed=embed_log, file=df)
+
+            if os.path.exists(file_name): os.remove(file_name)
+            await interaction.channel.delete()
+        except Exception as e:
+            print(f"KAPAT HATASI: {traceback.format_exc()}")
 
 # --- BUTONLU LİNK GÖRÜNÜMÜ ---
 class LinkButtons(discord.ui.View):
@@ -131,29 +118,33 @@ class ApplicationModal(discord.ui.Modal):
             for p in [self.p1, self.p2, self.p3, self.p4, self.p5]: self.add_item(p)
 
     async def on_submit(self, interaction: discord.Interaction):
-        if kullanici_bileti_var(interaction.guild, interaction.user.id):
-            return await interaction.response.send_message("⚠️ Mevcut bir biletin zaten açık!", ephemeral=True)
+        try:
+            overwrites = {
+                interaction.guild.default_role: discord.PermissionOverwrite(read_messages=False),
+                interaction.user: discord.PermissionOverwrite(read_messages=True, send_messages=True),
+                interaction.guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)
+            }
+            for r_id in YETKILI_ROLLER:
+                role = interaction.guild.get_role(r_id)
+                if role: overwrites[role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
 
-        overwrites = {
-            interaction.guild.default_role: discord.PermissionOverwrite(read_messages=False),
-            interaction.user: discord.PermissionOverwrite(read_messages=True, send_messages=True),
-            interaction.guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)
-        }
-        for r_id in YETKILI_ROLLER:
-            role = interaction.guild.get_role(r_id)
-            if role: overwrites[role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+            category = interaction.guild.get_channel(TICKET_KATEGORI_ID)
+            channel = await interaction.guild.create_text_channel(name=f"{self.app_type}-{interaction.user.name}", overwrites=overwrites, category=category)
+            await send_ticket_log("Açıldı", channel.name, interaction.user)
 
-        category = interaction.guild.get_channel(TICKET_KATEGORI_ID)
-        channel = await interaction.guild.create_text_channel(name=f"{self.app_type}-{interaction.user.name}", overwrites=overwrites, category=category)
-        await send_ticket_log("Açıldı", channel.name, interaction.user)
+            embed = discord.Embed(title=f"💎 Yeni {self.app_type.capitalize()} Başvurusu", color=discord.Color.gold())
+            embed.set_image(url=GIF_URL)
+            embed.set_footer(text="Founder Lvs")
+            for item in self.children: embed.add_field(name=item.label, value=item.value, inline=False)
 
-        embed = discord.Embed(title=f"💎 Yeni {self.app_type.capitalize()} Başvurusu", color=discord.Color.gold())
-        embed.set_image(url=GIF_URL)
-        embed.set_footer(text="Founder Lvs")
-        for item in self.children: embed.add_field(name=item.label, value=item.value, inline=False)
-
-        await channel.send(embed=embed, view=KapatView())
-        await interaction.response.send_message(f"✅ Başvurunuz iletildi: {channel.mention}", ephemeral=True)
+            await channel.send(embed=embed, view=KapatView())
+            await interaction.response.send_message(f"✅ Başvurunuz iletildi: {channel.mention}", ephemeral=True)
+        except Exception as e:
+            print(f"BASVURU HATASI: {traceback.format_exc()}")
+            try:
+                await interaction.response.send_message(f"❌ Hata oluştu: {e}", ephemeral=True)
+            except:
+                pass
 
 # --- SEÇİM VE TICKET GÖRÜNÜMLERİ ---
 class SelectionView(discord.ui.View):
@@ -177,37 +168,48 @@ class TicketView(discord.ui.View):
     def __init__(self): super().__init__(timeout=None)
 
     async def create_simple_ticket(self, interaction: discord.Interaction, label: str):
-        if kullanici_bileti_var(interaction.guild, interaction.user.id):
-            return await interaction.response.send_message("⚠️ Mevcut bir biletin zaten açık!", ephemeral=True)
+        try:
+            overwrites = {
+                interaction.guild.default_role: discord.PermissionOverwrite(read_messages=False),
+                interaction.user: discord.PermissionOverwrite(read_messages=True, send_messages=True),
+                interaction.guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)
+            }
+            for r_id in YETKILI_ROLLER:
+                role = interaction.guild.get_role(r_id)
+                if role: overwrites[role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
 
-        overwrites = {
-            interaction.guild.default_role: discord.PermissionOverwrite(read_messages=False),
-            interaction.user: discord.PermissionOverwrite(read_messages=True, send_messages=True),
-            interaction.guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)
-        }
-        for r_id in YETKILI_ROLLER:
-            role = interaction.guild.get_role(r_id)
-            if role: overwrites[role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+            category = interaction.guild.get_channel(TICKET_KATEGORI_ID)
+            ch = await interaction.guild.create_text_channel(name=f"{label}-{interaction.user.name}", overwrites=overwrites, category=category)
+            await send_ticket_log("Açıldı", ch.name, interaction.user)
 
-        category = interaction.guild.get_channel(TICKET_KATEGORI_ID)
-        ch = await interaction.guild.create_text_channel(name=f"{label}-{interaction.user.name}", overwrites=overwrites, category=category)
-        await send_ticket_log("Açıldı", ch.name, interaction.user)
+            embed = discord.Embed(description=f"Selam {interaction.user.mention}, **{label}** kategorisinde bilet açtın.", color=0x2ecc71)
+            embed.set_image(url=GIF_URL)
+            embed.set_footer(text="Founder Lvs")
 
-        embed = discord.Embed(description=f"Selam {interaction.user.mention}, **{label}** kategorisinde bilet açtın.", color=0x2ecc71)
-        embed.set_image(url=GIF_URL)
-        embed.set_footer(text="Founder Lvs")
+            await ch.send(embed=embed, view=KapatView())
+            await interaction.response.send_message(f"✅ Kanal açıldı: {ch.mention}", ephemeral=True)
+        except Exception as e:
+            print(f"TICKET HATASI: {traceback.format_exc()}")
+            try:
+                await interaction.response.send_message(f"❌ Hata oluştu: {e}", ephemeral=True)
+            except:
+                pass
 
-        await ch.send(embed=embed, view=KapatView())
-        await interaction.response.send_message(f"✅ Kanal açıldı: {ch.mention}", ephemeral=True)
+    @discord.ui.button(label="Destek", style=discord.ButtonStyle.danger, custom_id="lien2_destek")
+    async def destek(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.create_simple_ticket(interaction, "destek")
 
-    @discord.ui.button(label="Destek", style=discord.ButtonStyle.danger, custom_id="ticket_destek")
-    async def bug(self, interaction, button): await self.create_simple_ticket(interaction, "destek")
-    @discord.ui.button(label="Küfür & Şikayet", style=discord.ButtonStyle.secondary, custom_id="ticket_sikayet")
-    async def report(self, interaction, button): await self.create_simple_ticket(interaction, "sikayet")
-    @discord.ui.button(label="Takım Başvurusu", style=discord.ButtonStyle.success, custom_id="ticket_basvuru")
-    async def apply_team(self, interaction, button): await interaction.response.send_modal(ApplicationModal("Takım Başvurusu", "basvuru"))
-    @discord.ui.button(label="Partnerlik", style=discord.ButtonStyle.primary, custom_id="ticket_partner")
-    async def apply_partner(self, interaction, button): await interaction.response.send_modal(ApplicationModal("Partnerlik Başvurusu", "partner"))
+    @discord.ui.button(label="Küfür & Şikayet", style=discord.ButtonStyle.secondary, custom_id="lien2_sikayet")
+    async def sikayet(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.create_simple_ticket(interaction, "sikayet")
+
+    @discord.ui.button(label="Takım Başvurusu", style=discord.ButtonStyle.success, custom_id="lien2_basvuru")
+    async def basvuru(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(ApplicationModal("Takım Başvurusu", "basvuru"))
+
+    @discord.ui.button(label="Partnerlik", style=discord.ButtonStyle.primary, custom_id="lien2_partner")
+    async def partner(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(ApplicationModal("Partnerlik Başvurusu", "partner"))
 
 # --- ETKINLIKLER ---
 @bot.event
