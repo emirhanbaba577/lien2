@@ -98,7 +98,8 @@ class ApplicationModal(discord.ui.Modal):
             role = interaction.guild.get_role(r_id)
             if role: overwrites[role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
 
-        channel = await interaction.guild.create_text_channel(name=f"{self.app_type}-{interaction.user.name}", overwrites=overwrites)
+        category = interaction.guild.get_channel(1507136148479279267)
+        channel = await interaction.guild.create_text_channel(name=f"{self.app_type}-{interaction.user.name}", overwrites=overwrites, category=category)
         await send_ticket_log("Açıldı", channel.name, interaction.user)
         
         embed = discord.Embed(title=f"💎 Yeni {self.app_type.capitalize()} Başvurusu", color=discord.Color.gold())
@@ -176,7 +177,8 @@ class TicketView(discord.ui.View):
             role = interaction.guild.get_role(r_id)
             if role: overwrites[role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
             
-        ch = await interaction.guild.create_text_channel(name=f"{label}-{interaction.user.name}", overwrites=overwrites)
+        category = interaction.guild.get_channel(1507136148479279267)
+        ch = await interaction.guild.create_text_channel(name=f"{label}-{interaction.user.name}", overwrites=overwrites, category=category)
         await send_ticket_log("Açıldı", ch.name, interaction.user)
         
         embed = discord.Embed(description=f"Selam {interaction.user.mention}, **{label}** kategorisinde bilet açtın.", color=0x2ecc71)
@@ -315,6 +317,19 @@ async def ticket_kur(ctx):
 @bot.command()
 @commands.has_permissions(manage_messages=True)
 async def temizle(ctx, miktar: int): await ctx.channel.purge(limit=miktar + 1)
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def sosyal(ctx):
+    embed = discord.Embed(title="🌐 Lien2 Resmi Bağlantılar", color=0x3498db)
+    embed.add_field(name="📸 Instagram", value="[lienmt2](https://www.instagram.com/lienmt2/)", inline=False)
+    embed.add_field(name="🌐 Web Site", value="[lien2.com.tr](https://lien2.com.tr/)", inline=False)
+    embed.add_field(name="💬 Discord", value="[discord.gg/lien2](https://discord.gg/lien2)", inline=False)
+    embed.add_field(name="▶️ YouTube", value="[@LienMt2](https://www.youtube.com/@LienMt2)", inline=False)
+    embed.set_thumbnail(url=LOGO_URL)
+    embed.set_image(url=GIF_URL)
+    embed.set_footer(text="Founder Lvs")
+    await ctx.send(embed=embed)
 
 bot.run(os.getenv('TOKEN'))
 
