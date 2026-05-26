@@ -216,7 +216,7 @@ class TicketView(discord.ui.View):
         await ch.send(embed=embed, view=view)
         await interaction.response.send_message(f"✅ Kanal açıldı: {ch.mention}", ephemeral=True)
 
-    @discord.ui.button(label="Hata & Bug", style=discord.ButtonStyle.danger)
+    @discord.ui.button(label="Destek", style=discord.ButtonStyle.danger)
     async def bug(self, interaction, button): await self.create_simple_ticket(interaction, "hata")
     @discord.ui.button(label="Küfür & Şikayet", style=discord.ButtonStyle.secondary)
     async def report(self, interaction, button): await self.create_simple_ticket(interaction, "sikayet")
@@ -229,6 +229,7 @@ class TicketView(discord.ui.View):
 @bot.event
 async def on_ready():
     print(f'🛡️ {bot.user.name} AKTIF!')
+    await bot.change_presence(activity=discord.Game(name="Lien2"))
     keep_alive()
 
 @bot.event
